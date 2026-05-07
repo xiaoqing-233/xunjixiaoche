@@ -68,7 +68,7 @@ char speed[20];
 uint8_t Rx_data;
 
 uint32_t lcd_refresh_time = 0;
-
+uint32_t gw_read_time = 0;
 extern float r_speed_left, r_speed_right;
 
 float suduzuo;
@@ -156,7 +156,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		track_line();
+		
 		if(HAL_GetTick() - lcd_refresh_time > 100)
 		{
 			lcd_refresh_time = HAL_GetTick();
@@ -172,7 +172,13 @@ int main(void)
 			
 			OLED_Refresh();
 		}		
+		if(HAL_GetTick() - gw_read_time > 5)  //i2c读取速度限制  200hz
+		{  
+			gw_read_time = HAL_GetTick();
 			gw_get_value();
+			track_line();
+		}
+			
 			key_control();
     /* USER CODE END WHILE */
 

@@ -18,8 +18,8 @@ float Kd_pos = 10.0f;       // 位置环Kd（建议初始值：10）
 float gyro_kd = 0.0f;     // 陀螺仪角速度系数（建议初始值：100，范围50-200）
 
 // 位置环限幅
-float pos_out_max = 200.0f;   // 位置环输出上限（速度修正量）
-float pos_out_min = -200.0f;  // 位置环输出下限
+float pos_out_max = 500.0f;   // 位置环输出上限（速度修正量）
+float pos_out_min = -500.0f;  // 位置环输出下限
 
 float target_position = 0.0f;
 
@@ -82,7 +82,7 @@ float PositionPID_Calculate(float current_position)
     // GyrZ < 0: 车身正在左转
     // 减去陀螺仪项可以抑制过度转向
     extern float GyrZ;
-    float gyro_term = -gyro_kd * GyrZ;
+    float gyro_term = gyro_kd * GyrZ;
 
     // 陀螺仪项限幅（防止过度补偿）
     if (gyro_term > pos_out_max * 0.5f) gyro_term = pos_out_max * 0.5f;
@@ -152,7 +152,7 @@ void control_speed(void)
     {
         if (statr_speed < i_speed && first_set == 0)
         {
-            statr_speed += 0.5f;
+            statr_speed += 10.5f;
         }
         else
         {
