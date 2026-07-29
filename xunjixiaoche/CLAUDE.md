@@ -43,9 +43,9 @@ xunjixiaoche.ioc  STM32CubeMX project config
 
 1. **Grayscale sensor** (`ganweixunji.c` → `gw_get_value()`) reads 8-channel digital value via software I2C into global `Digtal`
 2. **Line detection** (`xunji.c` → `track_line()`) converts 8-bit sensor data to a weighted position, determines line offset and turn state (straight/left/right/sharp-turn)
-3. **Outer grayscale/position PID** (`pid.c` → `control_speed()`) runs at 100 Hz: it executes on every other 200 Hz TIM5 interrupt and holds `target_gyro_z` for the intervening angular-rate loop.
-4. **Middle angular-rate PID** (`pid.c` → `control_speed()`) runs at 200 Hz and tracks `target_gyro_z` against JY901S `GyrZ`.
-5. **Inner speed PID** (`pid.c` → `control_speed()`, called from the 200 Hz TIM5 ISR) runs at 200 Hz, uses incremental PID to track speed targets, and reads encoder counts from TIM4/TIM3.
+3. **Outer grayscale/position PID** (`pid.c` → `control_speed()`) runs at 100 Hz on every TIM5 interrupt and updates `target_gyro_z`.
+4. **Middle angular-rate PID** (`pid.c` → `control_speed()`) runs at 100 Hz and tracks `target_gyro_z` against JY901S `GyrZ`.
+5. **Inner speed PID** (`pid.c` → `control_speed()`, called from the 100 Hz TIM5 ISR) runs at 100 Hz, uses incremental PID to track speed targets, and reads encoder counts from TIM4/TIM3.
 6. **Motor output** (`motor.c` → `set_speed()`) applies PWM+direction signals, clamped to ±10000. TIM12 uses ARR=4199 with Prescaler=0: command magnitudes 0..10000 map to CCR 0..4200 using ARR + 1, so 10000 is 100% duty cycle at 20 kHz (84 MHz timer clock).
 
 Key globals: `target_position` (desired yaw from line tracking), `star_car` (start/stop via button), `Yaw`/`GyrZ` (IMU angle/angular velocity)

@@ -172,7 +172,7 @@ int main(void)
 			sprintf((char *)send,"%d%d%d%d%d%d%d%d    ",sensor[0],sensor[1],sensor[2],sensor[3],sensor[4],sensor[5],sensor[6],sensor[7]);
 			oled_i2c_draw_string(0, 16, (char *)send, 16, 1);
 
-			sprintf((char *)send,"%.2f  ",Yaw);
+			sprintf((char *)send,"%.2f, %.2f,",Yaw,GyrZ);
 			oled_i2c_draw_string(0, 32, (char *)send, 16, 1);
 
 			sprintf((char *)send,"%.2f%.2f  ",Kp_l,Ki_r);

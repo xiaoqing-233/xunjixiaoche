@@ -37,7 +37,6 @@ float pos_output = 0.0f;
 static float gyro_error = 0.0f;
 static float gyro_last_error = 0.0f;
 static float gyro_sum_error = 0.0f;
-static uint8_t outer_loop_divider = 0U;
 
 extern float r_speed_left;
 extern float r_speed_right;
@@ -106,7 +105,6 @@ void PositionPID_Reset(void)
     pos_sum_error = 0.0f;
     pos_output = 0.0f;
     target_gyro_z = 0.0f;
-    outer_loop_divider = 0U;
 
     gyro_error = 0.0f;
     gyro_last_error = 0.0f;
@@ -155,15 +153,8 @@ void control_speed(void)
     }
 
     line_offset = weighted_value - LINE_CENTER_POSITION;
-    if (outer_loop_divider == 0U)
-    {
-        target_gyro_z = position_pid_calculate(line_offset - target_position);
-        outer_loop_divider = 1U;
-    }
-    else
-    {
-        outer_loop_divider = 0U;
-    }
+    /* Positive GyrZ is a left turn, while a positive line offset requires a right turn. */
+    target_gyro_z = position_pid_calculate(target_position - line_offset);
     gyro_speed_correction = gyro_pid_calculate(target_gyro_z - GyrZ);
 
     if (is_line_lost())
@@ -221,14 +212,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM5)
     {
-        uint32_t current_time;
-        float dt;
         uint16_t current_count1;
         uint16_t current_count2;
         int16_t delta_count1;
         int16_t delta_count2;
-        static uint32_t prev_time;
-        static uint8_t speed_sample_initialized;
 
         /* Preserve the established one-period feedback latency. */
         control_speed(); ///pid计算
@@ -243,14 +230,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         last_count1 = current_count1;
         last_count2 = current_count2;
 
-        current_time = HAL_GetTick();
-//        dt = ((speed_sample_initialized == 0U) || (current_time == prev_time))
-//                 ? 0.005f
-//                 : (current_time - prev_time) * 0.001f;
-        prev_time = current_time;
-        speed_sample_initialized = 1U;
-
-        speed_left = -(float)delta_count1 ;
-        speed_right = -(float)delta_count2 ;
+        speed_left = -(float)delta_count1;
+        speed_right = -(float)delta_count2;
     }
 }

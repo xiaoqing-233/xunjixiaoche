@@ -228,7 +228,6 @@ static uint8_t vofa_apply_command(const char *command, float value)
             return 0U;
         }
         base_speed = (uint16_t)value;
-        reset_required = 1U;
     }
     else if (strcmp(command, "SW") == 0)
     {
