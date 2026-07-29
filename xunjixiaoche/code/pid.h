@@ -7,21 +7,31 @@
 #include "math.h"
 #include "motor.h"
 #include "jy901.h"
-#include "pid.h"
 
 void control_speed(void);
+void PositionPID_Reset(void);
+void PID_ResetAll(void);
 
-/*ÊµÑé*/
+/*Êµï¿½ï¿½*/
 float direction(float zhanxiangjiaodu);
 
 extern int16_t position_get;
-extern uint8_t star_car;
+extern volatile uint8_t star_car;
+extern volatile uint16_t base_speed;
+extern volatile float Kp_l, Ki_l, Kd_l;
+extern volatile float Kp_r, Ki_r, Kd_r;
 
 extern float target_position;
+extern float target_gyro_z;
+extern float gyro_speed_correction;
+extern volatile float Kp_pos, Ki_pos, Kd_pos;
+extern volatile float Kp_gyro, Ki_gyro, Kd_gyro;
+extern float pos_out_max, pos_out_min;
+extern float gyro_out_max, gyro_out_min;
 
-extern float start_track_pos;    // ¼ÇÂ¼¡¾×ªÍä/Ö±ÐÐÇ°µÄ³õÊ¼Î»ÖÃ¡¿£¨»ù×¼Öµ£©
-extern uint8_t is_turn_90;          // Ö±½Ç×ªÍä±êÖ¾£º0=Ö±ÐÐ/Î¢µ÷£¬1=Ö±½Ç×ªÍäÖÐ
-extern const float TURN_ANGLE;   // Ö±½Ç×ªÍä½Ç¶È£¨¹Ì¶¨90¶È£©
-extern const float TURN_TOLERANCE;// ×ªÍäÍê³ÉÎó²î£¨¡À2¶ÈÅÐ¶¨×ªÍê£©
+extern float start_track_pos;    // ï¿½ï¿½Â¼ï¿½ï¿½×ªï¿½ï¿½/Ö±ï¿½ï¿½Ç°ï¿½Ä³ï¿½Ê¼Î»ï¿½Ã¡ï¿½ï¿½ï¿½ï¿½ï¿½×¼Öµï¿½ï¿½
+extern uint8_t is_turn_90;          // Ö±ï¿½ï¿½×ªï¿½ï¿½ï¿½Ö¾ï¿½ï¿½0=Ö±ï¿½ï¿½/Î¢ï¿½ï¿½ï¿½ï¿½1=Ö±ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½
+extern const float TURN_ANGLE;   // Ö±ï¿½ï¿½×ªï¿½ï¿½Ç¶È£ï¿½ï¿½Ì¶ï¿½90ï¿½È£ï¿½
+extern const float TURN_TOLERANCE;// ×ªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î£¨ï¿½ï¿½2ï¿½ï¿½ï¿½Ð¶ï¿½×ªï¿½ê£©
 
 #endif

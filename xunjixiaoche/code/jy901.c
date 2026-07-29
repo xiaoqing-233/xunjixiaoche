@@ -3,121 +3,121 @@
 #include "dma.h"
 #include "stm32f4xx_hal.h"
 
-static uint8_t RxBuffer[11];/*½ÓÊÕÊý¾ÝÊý×é*/
-static volatile uint8_t RxState = 0;/*½ÓÊÕ×´Ì¬±êÖ¾Î»*/
-static uint8_t RxIndex = 0;/*½ÓÊÜÊý×éË÷Òý*/
-float Roll,Pitch,Yaw;/*½Ç¶ÈÐÅÏ¢£¬Èç¹ûÖ»ÐèÒªÕûÊý¿ÉÒÔ¸ÄÎªÕûÊýÀàÐÍ*/
-float AccX, AccY, AccZ;/*¼ÓËÙ¶ÈÐÅÏ¢*/
-float GyrX, GyrY, GyrZ;/*½ÇËÙ¶ÈÐÅÏ¢*/
+static uint8_t RxBuffer[11];/*ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+static volatile uint8_t RxState = 0;/*ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½Ö¾Î»*/
+static uint8_t RxIndex = 0;/*ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+float Roll,Pitch,Yaw;/*ï¿½Ç¶ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¸ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½*/
+float AccX, AccY, AccZ;/*ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½Ï¢*/
+float GyrX, GyrY, GyrZ;/*ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½Ï¢*/
 uint8_t g_uart2_receivedata = 0;
-/*ÊµÑé*/
+/*Êµï¿½ï¿½*/
 uint8_t Txdata_start=0x55;
 uint8_t Txdata_cmd=0x51;
 
 
 /**
- * @brief       Êý¾Ý°ü´¦Àíº¯Êý
- * @param       ´®¿Ú½ÓÊÕµÄÊý¾ÝRxData
- * @retval      ÎÞ
+ * @brief       ï¿½ï¿½ï¿½Ý°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+ * @param       ï¿½ï¿½ï¿½Ú½ï¿½ï¿½Õµï¿½ï¿½ï¿½ï¿½ï¿½RxData
+ * @retval      ï¿½ï¿½
  */
 void jy901_ReceiveData(uint8_t RxData)
 {
 	uint8_t i,sum=0;
-	if (RxState == 0)	//µÈ´ý°üÍ·
+	if (RxState == 0)	//ï¿½È´ï¿½ï¿½ï¿½Í·
 	{
-		if (RxData == 0x55)	//ÊÕµ½°üÍ·//0x55
+		if (RxData == 0x55)	//ï¿½Õµï¿½ï¿½ï¿½Í·//0x55
 		{
 			RxBuffer[RxIndex] = RxData;
 			RxState = 1;
-			RxIndex = 1;	//½øÈëÏÂÒ»×´Ì¬
+			RxIndex = 1;	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»×´Ì¬
 		}
 	}
 	else if (RxState == 1)
 	{
-		if (RxData == 0x53)	/*ÅÐ¶ÏÊý¾ÝÄÚÈÝ£¬ÐÞ¸ÄÕâÀï¿ÉÒÔ¸Ä±äÒª¶ÁµÄÊý¾ÝÄÚÈÝ£¬0x53Îª½Ç¶ÈÊä³ö*/
+		if (RxData == 0x53)	/*ï¿½Ð¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½Þ¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¸Ä±ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½0x53Îªï¿½Ç¶ï¿½ï¿½ï¿½ï¿½*/
 		{
 			RxBuffer[RxIndex] = RxData;
 			RxState = 2;
-			RxIndex = 2;	//½øÈëÏÂÒ»×´Ì¬
+			RxIndex = 2;	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»×´Ì¬
 		}
-		else if (RxData == 0x51)	/*¼ÓËÙ¶ÈÊý¾Ý°ü*/
+		else if (RxData == 0x51)	/*ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½Ý°ï¿½*/
     {
       RxBuffer[RxIndex] = RxData;
-      RxState = 3;  // Ê¹ÓÃ²»Í¬×´Ì¬½ÓÊÕ¼ÓËÙ¶ÈÊý¾Ý
+      RxState = 3;  // Ê¹ï¿½Ã²ï¿½Í¬×´Ì¬ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½
       RxIndex = 2;
     }
-	 else if (RxData == 0x52)	/*½ÇËÙ¶ÈÊý¾Ý°ü*/
+	 else if (RxData == 0x52)	/*ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½Ý°ï¿½*/
 	 {
 			RxBuffer[RxIndex] = RxData;
-			RxState = 4;  // Ê¹ÓÃ²»Í¬×´Ì¬½ÓÊÕ½ÇËÙ¶ÈÊý¾Ý
+			RxState = 4;  // Ê¹ï¿½Ã²ï¿½Í¬×´Ì¬ï¿½ï¿½ï¿½Õ½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½
 			RxIndex = 2;
 	 }
 	}
-	else if (RxState == 2)	//½ÓÊÕ½Ç¶ÈÊý¾Ý
+	else if (RxState == 2)	//ï¿½ï¿½ï¿½Õ½Ç¶ï¿½ï¿½ï¿½ï¿½ï¿½
 	{
 		RxBuffer[RxIndex++] = RxData;
-		if(RxIndex == 11)	//½ÓÊÕÍê³É
+		if(RxIndex == 11)	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		{
 			for(i=0;i<10;i++)
 			{
-				sum = sum + RxBuffer[i];	//¼ÆËãÐ£ÑéºÍ
+				sum = sum + RxBuffer[i];	//ï¿½ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ï¿½
 			}
-			if(sum == RxBuffer[10])		//Ð£Ñé³É¹¦
+			if(sum == RxBuffer[10])		//Ð£ï¿½ï¿½É¹ï¿½
 			{
-				/*¼ÆËãÊý¾Ý£¬¸ù¾ÝÊý¾ÝÄÚÈÝÑ¡Ôñ¶ÔÓ¦µÄ¼ÆËã¹«Ê½*/
+				/*ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Ó¦ï¿½Ä¼ï¿½ï¿½ã¹«Ê½*/
 				Roll = ((int16_t) ((int16_t) RxBuffer[3] << 8 | (int16_t) RxBuffer[2])) / 32768.0f * 180.0f;
 				Pitch = ((int16_t) ((int16_t) RxBuffer[5] << 8 | (int16_t) RxBuffer[4])) / 32768.0f * 180.0f;
 				Yaw = ((int16_t) ((int16_t) RxBuffer[7] << 8 | (int16_t) RxBuffer[6])) / 32768.0f * 180.0f;
 			}
 			RxState = 0;
-			RxIndex = 0;	//¶ÁÈ¡Íê³É£¬»Øµ½×î³õ×´Ì¬£¬µÈ´ý°üÍ·
+			RxIndex = 0;	//ï¿½ï¿½È¡ï¿½ï¿½É£ï¿½ï¿½Øµï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ï¿½È´ï¿½ï¿½ï¿½Í·
 		}
 	}
-	else if (RxState == 3)	//½ÓÊÕ¼ÓËÙ¶ÈÊý¾Ý
+	else if (RxState == 3)	//ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½
 	{
 		RxBuffer[RxIndex++] = RxData;
-		if(RxIndex == 11)	//½ÓÊÕÍê³É
+		if(RxIndex == 11)	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		{
 				for(i=0;i<10;i++)
 				{
-						sum = sum + RxBuffer[i];	//¼ÆËãÐ£ÑéºÍ
+						sum = sum + RxBuffer[i];	//ï¿½ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ï¿½
 				}
-				if(sum == RxBuffer[10])		//Ð£Ñé³É¹¦
+				if(sum == RxBuffer[10])		//Ð£ï¿½ï¿½É¹ï¿½
 				{
-						/*¼ÆËã¼ÓËÙ¶ÈÊý¾Ý (µ¥Î»: g)*/
+						/*ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½Î»: g)*/
 						AccX = ((int16_t) ((int16_t) RxBuffer[3] << 8 | (int16_t) RxBuffer[2])) / 32768.0f * 16.0f * 9.8f;
 						AccY = ((int16_t) ((int16_t) RxBuffer[5] << 8 | (int16_t) RxBuffer[4])) / 32768.0f * 16.0f * 9.8f;
 						AccZ = ((int16_t) ((int16_t) RxBuffer[7] << 8 | (int16_t) RxBuffer[6])) / 32768.0f * 16.0f * 9.8f;
 				}
 				RxState = 0;
-				RxIndex = 0;	//¶ÁÈ¡Íê³É£¬»Øµ½×î³õ×´Ì¬
+				RxIndex = 0;	//ï¿½ï¿½È¡ï¿½ï¿½É£ï¿½ï¿½Øµï¿½ï¿½ï¿½ï¿½×´Ì¬
 		}
 	}
-	else if (RxState == 4)	//½ÓÊÕ½ÇËÙ¶ÈÊý¾Ý
+	else if (RxState == 4)	//ï¿½ï¿½ï¿½Õ½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½
 	{
 		RxBuffer[RxIndex++] = RxData;
-		if(RxIndex == 11)	//½ÓÊÕÍê³É
+		if(RxIndex == 11)	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		{
 			for(i=0;i<10;i++)
 			{
-					sum = sum + RxBuffer[i];	//¼ÆËãÐ£ÑéºÍ
+					sum = sum + RxBuffer[i];	//ï¿½ï¿½ï¿½ï¿½Ð£ï¿½ï¿½ï¿½
 			}
-			if(sum == RxBuffer[10])		//Ð£Ñé³É¹¦
+			if(sum == RxBuffer[10])		//Ð£ï¿½ï¿½É¹ï¿½
 			{
-					/*¼ÆËã½ÇËÙ¶ÈÊý¾Ý (µ¥Î»: ¡ã/s)*/
+					/*ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½Î»: ï¿½ï¿½/s)*/
 					GyrX = ((int16_t) ((int16_t) RxBuffer[3] << 8 | (int16_t) RxBuffer[2])) / 32768.0f * 2000.0f;
 					GyrY = ((int16_t) ((int16_t) RxBuffer[5] << 8 | (int16_t) RxBuffer[4])) / 32768.0f * 2000.0f;
 					GyrZ = ((int16_t) ((int16_t) RxBuffer[7] << 8 | (int16_t) RxBuffer[6])) / 32768.0f * 2000.0f;
 			}
 			RxState = 0;
-			RxIndex = 0;	//¶ÁÈ¡Íê³É£¬»Øµ½×î³õ×´Ì¬
+			RxIndex = 0;	//ï¿½ï¿½È¡ï¿½ï¿½É£ï¿½ï¿½Øµï¿½ï¿½ï¿½ï¿½×´Ì¬
 		}
 	}
 }
 
 
 
-// JY901SÖÃÁãÃüÁî
+// JY901Sï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 void JY901S_ZeroCalibration(void)
 {
 	
@@ -125,14 +125,14 @@ void JY901S_ZeroCalibration(void)
     uint8_t zero_cmd[5] = {0xFF, 0xAA, 0x01, 0x08, 0x00};
     uint8_t zero_save[5] = {0xFF, 0xAA, 0x00, 0x00, 0x00};
 		
-    // ·¢ËÍ½âËøÃüÁî
-    HAL_UART_Transmit(&huart1, zero_start, 5, 1000);
+    // ï¿½ï¿½ï¿½Í½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    HAL_UART_Transmit(&huart2, zero_start, 5, 1000);
 		HAL_Delay(200);
-		//Ð£×¼ÃüÁî
-		HAL_UART_Transmit(&huart1, zero_cmd, 5, 1000);
-		HAL_Delay(3000);
-		//Ð£×¼±£´æ
-		HAL_UART_Transmit(&huart1, zero_save, 5, 1000);
+		//Ð£×¼ï¿½ï¿½ï¿½ï¿½
+    HAL_UART_Transmit(&huart2, zero_cmd, 5, 1000);
+		HAL_Delay(1000);
+		//Ð£×¼ï¿½ï¿½ï¿½ï¿½
+    HAL_UART_Transmit(&huart2, zero_save, 5, 1000);
 }
 
 
@@ -162,7 +162,6 @@ void JY901S_ZeroCalibration(void)
 //		HAL_UART_Receive_DMA(&huart1,&g_uart2_receivedata,11);
 //	}
 //}
-
 
 
 

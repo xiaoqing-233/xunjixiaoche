@@ -1,163 +1,120 @@
 #include "motor.h"
 #include "pid.h"
 
-#define PWM_MAX 1000
-#define PWM_MIN -1000
 uint8_t stop = 0;
 
-volatile int32_t count1;        // 编码器计数值（来自编码器接口）
-volatile int16_t count22;        // 编码器计数值（来自编码器接口）
-volatile int32_t last_count1;  // 上次采样的计数值
-volatile int32_t last_count2;  // 上次采样的计数值
-volatile float speed_left, speed_right;  // 电机速度（RPM）
-float r_speed_left, r_speed_right;			//yuqisudu
-float speed_1,speed_2;
-uint8_t time1;
+volatile uint16_t count1;
+volatile uint16_t count22;
+volatile uint16_t last_count1;
+volatile uint16_t last_count2;
+volatile float speed_left;
+volatile float speed_right;
+float r_speed_left;
+float r_speed_right;
 
-/*电机限幅函数*/
-void Limit(float *motoA,float *motoB)
+static GPIO_PinState drv8701_reverse_level(GPIO_PinState forward_level)
 {
-	if(*motoA>PWM_MAX)*motoA=PWM_MAX;
-	if(*motoA<PWM_MIN)*motoA=PWM_MIN;
-	if(*motoB>PWM_MAX)*motoB=PWM_MAX;
-	if(*motoB<PWM_MIN)*motoB=PWM_MIN;
+    return (forward_level == GPIO_PIN_SET) ? GPIO_PIN_RESET : GPIO_PIN_SET;
 }
 
+static void drv8701_set_motor(TIM_HandleTypeDef *pwm_timer,
+                              uint32_t pwm_channel,
+                              GPIO_TypeDef *ph_port,
+                              uint16_t ph_pin,
+                              GPIO_PinState forward_level,
+                              float speed)
+{
+    GPIO_PinState ph_level;
+    uint32_t pwm;
 
-
-//电机两个pwm生成和编码器初始化,电机驱动使能
-void motor_init(void){
-	//HAL_GPIO_WritePin(SYBT_GPIO_Port,SYBT_Pin,GPIO_PIN_SET);
-	
-	HAL_TIM_Base_Start_IT(&htim5);
-	HAL_TIM_PWM_Start(&htim3,TIM_CHANNEL_4);
-	HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_3);
-	HAL_TIM_Encoder_Start(&htim1,TIM_CHANNEL_ALL);
-	HAL_TIM_Encoder_Start(&htim2,TIM_CHANNEL_ALL);
-	__HAL_TIM_SET_COUNTER(&htim1,0);//32700
-	__HAL_TIM_SET_COUNTER(&htim2,0);
-	
-}
-
-//void TIM5_IRQHandler(void) {
-//   HAL_TIM_IRQHandler(&htim5);
-//}
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-
-	if (htim->Instance == TIM5)
-		{
-				
-				control_speed();
-			  count1 = __HAL_TIM_GET_COUNTER(&htim2);
-			  count22 = __HAL_TIM_GET_COUNTER(&htim1);
-			  int32_t count2= (int32_t)count22;
-        static uint32_t prev_time = 0;
-        uint32_t current_time = HAL_GetTick();
-        float dt = (current_time - prev_time) *0.001f;  // 采样时间（秒）
-        prev_time = current_time;
-        
-        /* 读取编码器计数值（假设已在编码器中断中更新） */
-        int32_t current_count1 = count1;
-        int32_t current_count2 = count2;
-        
-        /* 计算计数值变化（考虑溢出情况） */
-        int32_t delta_count1 = current_count1 - last_count1;
-        int32_t delta_count2 = current_count2 - last_count2;
-
-        /* 更新上次计数值 */
-        last_count1 = current_count1;
-        last_count2 = current_count2;
-        
-        /* 计算速度（RPM） */
-        speed_left = -(float)delta_count1 * dt * 4.12f*60;
-        speed_right = (float)delta_count2 * dt * 4.12f*60;
-				
-	
+    if (!isfinite(speed) || (speed == 0.0f))
+    {
+        __HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, DRV8701_PWM_OFF);
+        HAL_GPIO_WritePin(ph_port, ph_pin, GPIO_PIN_RESET);
+        return;
     }
-	if(htim->Instance == TIM12)
-	{
 
-	}
+    ph_level = (speed > 0.0f) ? forward_level : drv8701_reverse_level(forward_level);
+    /* PWM1 is high for CCR timer counts; ARR + 1 preserves the 0..10000 scale. */
+    pwm = (uint32_t)(((speed > 0.0f) ? speed : -speed) *
+                     ((float)__HAL_TIM_GET_AUTORELOAD(pwm_timer) + 1.0f) / PWM_MAX);
+    HAL_GPIO_WritePin(ph_port, ph_pin, ph_level);
+    __HAL_TIM_SET_COMPARE(pwm_timer, pwm_channel, pwm);
 }
-		
+
+void Limit(float *motoA, float *motoB)
+{
+    if (*motoA > PWM_MAX) *motoA = PWM_MAX;
+    if (*motoA < PWM_MIN) *motoA = PWM_MIN;
+    if (*motoB > PWM_MAX) *motoB = PWM_MAX;
+    if (*motoB < PWM_MIN) *motoB = PWM_MIN;
+}
+
+void motor_init(void)
+{
+    HAL_GPIO_WritePin(DRV8701_LEFT_PH_GPIO_PORT,
+                      DRV8701_LEFT_PH_GPIO_PIN, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(DRV8701_RIGHT_PH_GPIO_PORT,
+                      DRV8701_RIGHT_PH_GPIO_PIN, GPIO_PIN_RESET);
+    __HAL_TIM_SET_COMPARE(DRV8701_LEFT_EN_PWM_TIMER,
+                          DRV8701_LEFT_EN_PWM_CHANNEL, DRV8701_PWM_OFF);
+    __HAL_TIM_SET_COMPARE(DRV8701_RIGHT_EN_PWM_TIMER,
+                          DRV8701_RIGHT_EN_PWM_CHANNEL, DRV8701_PWM_OFF);
+
+    HAL_TIM_PWM_Start(DRV8701_LEFT_EN_PWM_TIMER,
+                      DRV8701_LEFT_EN_PWM_CHANNEL);
+    HAL_TIM_PWM_Start(DRV8701_RIGHT_EN_PWM_TIMER,
+                      DRV8701_RIGHT_EN_PWM_CHANNEL);
+    HAL_TIM_Encoder_Start(DRV8701_LEFT_ENCODER_TIMER,
+                          DRV8701_ENCODER_CHANNELS);
+    HAL_TIM_Encoder_Start(DRV8701_RIGHT_ENCODER_TIMER,
+                          DRV8701_ENCODER_CHANNELS);
+    __HAL_TIM_SET_COUNTER(DRV8701_LEFT_ENCODER_TIMER, 0);
+    __HAL_TIM_SET_COUNTER(DRV8701_RIGHT_ENCODER_TIMER, 0);
+    count1 = 0;
+    count22 = 0;
+    last_count1 = 0;
+    last_count2 = 0;
+    HAL_TIM_Base_Start_IT(&htim5);
+}
 
 
-
-
-/* 获取当前速度（供主程序调用） */
-float GetMotorSpeed1(void) {
+float GetMotorSpeed1(void)
+{
     return speed_left;
 }
 
-float GetMotorSpeed2(void) {
+float GetMotorSpeed2(void)
+{
     return speed_right;
 }
 
-//0前进，1后退
-void set_speed(float speed_l,float speed_r){
-		if(speed_l > 1000)
-			speed_1 = 1000;
-		if(speed_l < -1000)
-			speed_1 = -1000;
-		if(speed_r > 1000)
-			speed_2 = 1000;
-		if(speed_r < -1000)
-			speed_2 = -1000;
-	
-		if(speed_l > 0){
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_8,GPIO_PIN_SET);
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_7,GPIO_PIN_RESET);
-			__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_4,speed_l);
-		}
-		else if(speed_l < 0){
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_8,GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_7,GPIO_PIN_SET);
-			__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_4,-speed_l);
-		}
-		else{
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_8,GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_7,GPIO_PIN_RESET);
-		}
-		
-		if(speed_r > 0){
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_6, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOD,GPIO_PIN_15,GPIO_PIN_SET);
-			__HAL_TIM_SET_COMPARE(&htim4,TIM_CHANNEL_3,speed_r);
-		}
-		else if(speed_r < 0){
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_6, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(GPIOD,GPIO_PIN_15,GPIO_PIN_RESET);
-			__HAL_TIM_SET_COMPARE(&htim4,TIM_CHANNEL_3,-speed_r);
-		}
-		else{
-			HAL_GPIO_WritePin(GPIOC,GPIO_PIN_6, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(GPIOD,GPIO_PIN_15,GPIO_PIN_RESET);
-		}
-}
-
-/*电机停止函数*/
-void Stop_protect(float *Med_Jiaodu,float *Jiaodu)
+void set_speed(float speed_l, float speed_r)
 {
-	if((*Jiaodu-*Med_Jiaodu)>40)
-	{
-//		set_speed(0,0);
-		stop=1;
-	}
-	else if((*Jiaodu-*Med_Jiaodu)<-40)
-	{
-//		set_speed(0,0);
-		stop=1;
-	}
-	else if((*Jiaodu-*Med_Jiaodu)>-40 && (*Jiaodu-*Med_Jiaodu)<40)
-	{
-		stop=0;
-	}
+    Limit(&speed_l, &speed_r);
+    drv8701_set_motor(DRV8701_LEFT_EN_PWM_TIMER,
+                      DRV8701_LEFT_EN_PWM_CHANNEL,
+                      DRV8701_LEFT_PH_GPIO_PORT,
+                      DRV8701_LEFT_PH_GPIO_PIN,
+                      DRV8701_LEFT_FORWARD_PH_LEVEL,
+                      speed_l);
+    drv8701_set_motor(DRV8701_RIGHT_EN_PWM_TIMER,
+                      DRV8701_RIGHT_EN_PWM_CHANNEL,
+                      DRV8701_RIGHT_PH_GPIO_PORT,
+                      DRV8701_RIGHT_PH_GPIO_PIN,
+                      DRV8701_RIGHT_FORWARD_PH_LEVEL,
+                      speed_r);
 }
 
-
-
-
-
-
-
+void Stop_protect(float *Med_Jiaodu, float *Jiaodu)
+{
+    if (((*Jiaodu - *Med_Jiaodu) > 40.0f) ||
+        ((*Jiaodu - *Med_Jiaodu) < -40.0f))
+    {
+        stop = 1;
+    }
+    else
+    {
+        stop = 0;
+    }
+}

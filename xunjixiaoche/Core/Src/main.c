@@ -19,7 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
-#include "spi.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -32,11 +31,12 @@
 #include "motor.h"
 #include "string.h"
 #include "xunji.h"
-#include "chuankou.h"
+#include "vofa.h"
+#include "justfloat.h"
 #include "pid.h"
-#include "oled.h"
 #include "jy901.h"
 #include "key.h"
+#include "oled_i2c.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -59,16 +59,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t ReceiveBluetoothDate;
 uint8_t send[30];
 uint8_t sensor_erjinzhi[8];
 
-char rece[30],speed1,speed2,speed3,speed4;
-char speed[20];
-uint8_t Rx_data;
+static volatile HAL_StatusTypeDef oled_i2c_init_status;
 
 uint32_t lcd_refresh_time = 0;
 uint32_t gw_read_time = 0;
+static uint32_t telemetry_next_time;
 extern float r_speed_left, r_speed_right;
 
 float suduzuo;
@@ -83,7 +81,6 @@ extern float finnal_angle_z;
 extern float Roll,Pitch,Yaw;/*角度信息，如果只需要整数可以改为整数类型*/
 extern float AccX, AccY, AccZ;/*加速度信息*/
 extern float GyrX, GyrY, GyrZ;/*角速度信息*/
-uint8_t state_huart1;
 /***********传感器************/
 uint8_t track_mode = 1;  
 /****************************/
@@ -134,45 +131,56 @@ int main(void)
   MX_DMA_Init();
   MX_TIM3_Init();
   MX_TIM4_Init();
-  MX_TIM1_Init();
-  MX_TIM2_Init();
   MX_TIM5_Init();
   MX_USART1_UART_Init();
-  MX_SPI2_Init();
-  MX_SPI1_Init();
   MX_TIM12_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 	HAL_GPIO_WritePin(GPIOB,GPIO_PIN_1,GPIO_PIN_SET);
-	OLED_Init();
+	oled_i2c_init_status = oled_i2c_init();
 	motor_init();
-//	OLED_ShowString(0, 40, (uint8_t *)"OK", 16, 1); 
-//	HAL_Delay(10);
-	HAL_UART_Receive_IT(&huart1,&Rx_data, 1);
+	vofa_init();
+	HAL_UART_Receive_IT(&huart2, &g_uart2_receivedata, 1);
 	JY901S_ZeroCalibration();
+	telemetry_next_time = HAL_GetTick() + 10U;
   /* USER CODE END 2 */
+
+
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		
-		if(HAL_GetTick() - lcd_refresh_time > 100)
+		uint32_t current_time;
+
+		vofa_task();
+		current_time = HAL_GetTick();
+		if ((uint32_t)(current_time - telemetry_next_time) < 0x80000000U) //vofa 发送
+		{
+			float telemetry_values[2] = { speed_left, speed_right };
+
+			telemetry_next_time = current_time + 10U;
+			(void)justfloat_send_dma(telemetry_values, 2U);
+		}
+
+		if((oled_i2c_init_status == HAL_OK) && (HAL_GetTick() - lcd_refresh_time > 100))  //oled数据
 		{
 			lcd_refresh_time = HAL_GetTick();
+			oled_i2c_clear_buffer();
 			sprintf((char *)send,"%d  %.1f ",line_lost,last_valid_position);
-			OLED_ShowString(0, 16, (uint8_t *)send, 16, 1); 
-			sprintf((char *)send,"%.1f %d ",weighted_value,black_count);
-//			OLED_ShowString(0, 40, (uint8_t *)send, 16, 1);
+			oled_i2c_draw_string(0, 0, (char *)send, 16, 1);
 			sprintf((char *)send,"%d%d%d%d%d%d%d%d    ",sensor[0],sensor[1],sensor[2],sensor[3],sensor[4],sensor[5],sensor[6],sensor[7]);
-			OLED_ShowString(0, 24, (uint8_t *)send, 16, 1); // 在0,0位置显示16号字体的字符串，1表示正常颜色
-			
+			oled_i2c_draw_string(0, 16, (char *)send, 16, 1);
+
 			sprintf((char *)send,"%.2f  ",Yaw);
-			OLED_ShowString(0, 40, (uint8_t *)send, 16, 1); // 在0,0位置显示16号字体的字符串，1表示正常颜色
-			
-			OLED_Refresh();
-		}		
-		if(HAL_GetTick() - gw_read_time > 5)  //i2c读取速度限制  200hz
+			oled_i2c_draw_string(0, 32, (char *)send, 16, 1);
+
+			sprintf((char *)send,"%.2f%.2f  ",Kp_l,Ki_r);
+			oled_i2c_draw_string(0, 48, (char *)send, 16, 1);
+
+			oled_i2c_init_status = oled_i2c_refresh();
+		}
+		if(HAL_GetTick() - gw_read_time > 5)  //循迹i2c读取速度限制  200hz
 		{  
 			gw_read_time = HAL_GetTick();
 			gw_get_value();
@@ -238,10 +246,23 @@ void SystemClock_Config(void)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	if(huart == &huart1){
-		jy901_ReceiveData(g_uart2_receivedata);		
-		HAL_UART_Receive_IT(&huart1,&g_uart2_receivedata,1);
-		HAL_UART_Receive_DMA(&huart1,&g_uart2_receivedata,11);
+		vofa_receive_byte(*vofa_rx_buffer());
 	}
+	else if(huart == &huart2){
+		jy901_ReceiveData(g_uart2_receivedata);
+		HAL_UART_Receive_IT(&huart2, &g_uart2_receivedata, 1);
+	}
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+	justfloat_on_tx_complete(huart);
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+	justfloat_on_uart_error(huart);
+	vofa_on_uart_error(huart);
 }
 /* USER CODE END 4 */
 

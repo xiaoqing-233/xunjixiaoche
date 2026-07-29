@@ -56,10 +56,9 @@
 
 /* External variables --------------------------------------------------------*/
 extern TIM_HandleTypeDef htim5;
-extern TIM_HandleTypeDef htim12;
-extern DMA_HandleTypeDef hdma_usart1_rx;
 extern DMA_HandleTypeDef hdma_usart1_tx;
 extern UART_HandleTypeDef huart1;
+extern UART_HandleTypeDef huart2;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -217,17 +216,17 @@ void USART1_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles TIM8 break interrupt and TIM12 global interrupt.
+  * @brief This function handles USART2 global interrupt.
   */
-void TIM8_BRK_TIM12_IRQHandler(void)
+void USART2_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM8_BRK_TIM12_IRQn 0 */
+  /* USER CODE BEGIN USART2_IRQn 0 */
 
-  /* USER CODE END TIM8_BRK_TIM12_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim12);
-  /* USER CODE BEGIN TIM8_BRK_TIM12_IRQn 1 */
+  /* USER CODE END USART2_IRQn 0 */
+  HAL_UART_IRQHandler(&huart2);
+  /* USER CODE BEGIN USART2_IRQn 1 */
 
-  /* USER CODE END TIM8_BRK_TIM12_IRQn 1 */
+  /* USER CODE END USART2_IRQn 1 */
 }
 
 /**
@@ -242,20 +241,6 @@ void TIM5_IRQHandler(void)
   /* USER CODE BEGIN TIM5_IRQn 1 */
 
   /* USER CODE END TIM5_IRQn 1 */
-}
-
-/**
-  * @brief This function handles DMA2 stream2 global interrupt.
-  */
-void DMA2_Stream2_IRQHandler(void)
-{
-  /* USER CODE BEGIN DMA2_Stream2_IRQn 0 */
-
-  /* USER CODE END DMA2_Stream2_IRQn 0 */
-  HAL_DMA_IRQHandler(&hdma_usart1_rx);
-  /* USER CODE BEGIN DMA2_Stream2_IRQn 1 */
-
-  /* USER CODE END DMA2_Stream2_IRQn 1 */
 }
 
 /**

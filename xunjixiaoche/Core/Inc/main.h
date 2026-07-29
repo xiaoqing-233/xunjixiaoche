@@ -57,22 +57,24 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define MOTOR_RIGHT_PH_Pin GPIO_PIN_5
+#define MOTOR_RIGHT_PH_GPIO_Port GPIOB
+#define OLED_SOFT_SDA_Pin GPIO_PIN_8
+#define OLED_SOFT_SDA_GPIO_Port GPIOB
+#define OLED_SOFT_SCL_Pin GPIO_PIN_9
+#define OLED_SOFT_SCL_GPIO_Port GPIOB
+#define MOTOR_LEFT_PH_Pin GPIO_PIN_0
+#define MOTOR_LEFT_PH_GPIO_Port GPIOE
+#define USER_KEY1_Pin GPIO_PIN_1
+#define USER_KEY1_GPIO_Port GPIOC
+#define USER_KEY2_Pin GPIO_PIN_2
+#define USER_KEY2_GPIO_Port GPIOC
+#define USER_KEY3_Pin GPIO_PIN_3
+#define USER_KEY3_GPIO_Port GPIOC
 #define SOFT_SDA_Pin GPIO_PIN_1
-#define SOFT_SDA_GPIO_Port GPIOC
+#define SOFT_SDA_GPIO_Port GPIOE
 #define SOFT_SCL_Pin GPIO_PIN_2
-#define SOFT_SCL_GPIO_Port GPIOC
-#define CS_Pin GPIO_PIN_11
-#define CS_GPIO_Port GPIOB
-#define LCD_SCL_Pin GPIO_PIN_10
-#define LCD_SCL_GPIO_Port GPIOC
-#define LCD_CS_Pin GPIO_PIN_11
-#define LCD_CS_GPIO_Port GPIOC
-#define LCD_SDA_Pin GPIO_PIN_12
-#define LCD_SDA_GPIO_Port GPIOC
-#define LCD_DC_Pin GPIO_PIN_2
-#define LCD_DC_GPIO_Port GPIOD
-#define LCD_RES_Pin GPIO_PIN_3
-#define LCD_RES_GPIO_Port GPIOD
+#define SOFT_SCL_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
 

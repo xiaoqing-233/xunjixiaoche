@@ -8,11 +8,11 @@
 #include "gw_grayscale_sensor.h"
 
 #define SDA_PIN GPIO_PIN_1
-#define SDA_PORT GPIOC
+#define SDA_PORT GPIOE
 #define SCL_PIN GPIO_PIN_2
-#define SCL_PORT GPIOC
+#define SCL_PORT GPIOE
 
-/* »ù±¾I2C²Ù×÷ºê */
+/* ï¿½ï¿½ï¿½ï¿½I2Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 #define SDA_HIGH() HAL_GPIO_WritePin(SDA_PORT, SDA_PIN, GPIO_PIN_SET)
 #define SDA_LOW()  HAL_GPIO_WritePin(SDA_PORT, SDA_PIN, GPIO_PIN_RESET)
 #define SCL_HIGH() HAL_GPIO_WritePin(SCL_PORT, SCL_PIN, GPIO_PIN_SET)

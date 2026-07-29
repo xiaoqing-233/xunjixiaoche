@@ -1,17 +1,17 @@
-#ifndef _KEY_H
-#define _KEY_H
+#ifndef KEY_H
+#define KEY_H
 
-#include "stm32f4xx_hal.h"
-#include "stdint.h"
-#include "stdbool.h"
-#include "pid.h"
+#include <stdint.h>
 
-typedef enum{
-	key_B1,
-	keyno
-}key;
-void key_control();
+typedef enum
+{
+    KEY_EVENT_NONE = 0,
+    KEY_EVENT_1_PRESSED,
+    KEY_EVENT_2_PRESSED,
+    KEY_EVENT_3_PRESSED
+} KeyEvent;
 
-extern bool car_state;
+void key_control(void);
+KeyEvent key_get_last_event(void);
 
 #endif
