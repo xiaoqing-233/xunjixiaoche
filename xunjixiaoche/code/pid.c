@@ -11,22 +11,23 @@ volatile float Kp_r = 1.0f, Ki_r = 0.8f;
 
 volatile float Kd_l = 0.0f, Kd_r = 0.0f;
 
-volatile uint16_t base_speed = 0;
+volatile uint16_t base_speed = 1000;
 
-volatile float Kp_pos = 25.0f;
+volatile float Kp_pos = 50.0f;
 volatile float Ki_pos = 0.0f;
-volatile float Kd_pos = 8.0f;
-volatile float Kp_gyro = 2.0f;
+volatile float Kd_pos = 100.0f;
+volatile float Kp_gyro = 2.8f;
 volatile float Ki_gyro = 0.0f;
-volatile float Kd_gyro = 0.2f;
+volatile float Kd_gyro = 1.8f;
 
-float pos_out_max = 120.0f;
-float pos_out_min = -120.0f;
-float gyro_out_max = 250.0f;
-float gyro_out_min = -250.0f;
+float pos_out_max = 90.0f;
+float pos_out_min = -90.0f;
+float gyro_out_max = 500.0f;
+float gyro_out_min = -500.0f;
 
-float target_position = 0.0f;
-float target_gyro_z = 0.0f;
+volatile float target_position = 0.0f;
+volatile float target_gyro_z = 0.0f;
+volatile float debug_target_gyro_z = 0.0f;
 float gyro_speed_correction = 0.0f;
 
 float pos_error = 0.0f;
@@ -50,8 +51,13 @@ float sum_error_l = 0.0f, sum_error_r = 0.0f;
 float MOTOl = 0.0f, MOTOr = 0.0f;
 
 volatile uint8_t star_car;
+volatile uint8_t k;
 float statr_speed = 0.0f;
 static float first_set = 0.0f;
+static volatile uint8_t slow_stop_active;
+static volatile uint8_t slow_stop_done;
+static volatile float target_speed_scale = 1.0f;
+static volatile float target_speed_scale_goal = 1.0f;
 
 static float pid_limit(float value, float maximum, float minimum)
 {
@@ -104,12 +110,12 @@ void PositionPID_Reset(void)
     pos_last_error = 0.0f;
     pos_sum_error = 0.0f;
     pos_output = 0.0f;
-    target_gyro_z = 0.0f;
+
 
     gyro_error = 0.0f;
     gyro_last_error = 0.0f;
     gyro_sum_error = 0.0f;
-    gyro_speed_correction = 0.0f;
+
 }
 
 static void speed_pid_reset(void)
@@ -130,6 +136,49 @@ void PID_ResetAll(void)
 {
     PositionPID_Reset();
     speed_pid_reset();
+    slow_stop_active = 0U;
+    slow_stop_done = 0U;
+    target_speed_scale = 1.0f;
+    target_speed_scale_goal = 1.0f;
+}
+
+void PID_RequestSlowStop(void)
+{
+    slow_stop_active = 1U;
+    slow_stop_done = 0U;
+    first_set = 1.0f;
+}
+
+void PID_ClearSlowStop(void)
+{
+    slow_stop_active = 0U;
+    slow_stop_done = 0U;
+    target_speed_scale = 1.0f;
+    target_speed_scale_goal = 1.0f;
+}
+
+void PID_SetTargetSpeedScale(float ratio)
+{
+    if (ratio < 0.0f)
+    {
+        ratio = 0.0f;
+    }
+    else if (ratio > 1.0f)
+    {
+        ratio = 1.0f;
+    }
+
+    target_speed_scale_goal = ratio;
+}
+
+uint8_t PID_IsSlowStopDone(void)
+{
+    return slow_stop_done;
+}
+
+uint8_t PID_IsTargetSpeedScaleStopped(void)
+{
+    return ((target_speed_scale_goal <= 0.0f) && (target_speed_scale <= 0.0f)) ? 1U : 0U;
 }
 
 void control_speed(void)
@@ -138,6 +187,7 @@ void control_speed(void)
     float i_speed;
     float left_speed_target;
     float right_speed_target;
+    float speed_scale_step;
 
     extern float weighted_value;
     extern uint8_t is_line_lost(void);
@@ -146,16 +196,42 @@ void control_speed(void)
     {
         statr_speed = 0.0f;
         first_set = 0.0f;
+        if (slow_stop_done == 0U)
+        {
+            slow_stop_active = 0U;
+        }
         PositionPID_Reset();
         speed_pid_reset();
         set_speed(0.0f, 0.0f);
         return;
     }
 
+    speed_scale_step = (k == 1U) ? 0.001f : 0.01f;
+
+    if (target_speed_scale < target_speed_scale_goal)
+    {
+        target_speed_scale += speed_scale_step;
+        if (target_speed_scale > target_speed_scale_goal)
+        {
+            target_speed_scale = target_speed_scale_goal;
+        }
+    }
+    else if (target_speed_scale > target_speed_scale_goal)
+    {
+        target_speed_scale -= speed_scale_step;
+        if (target_speed_scale < target_speed_scale_goal)
+        {
+            target_speed_scale = target_speed_scale_goal;
+        }
+    }
+
     line_offset = weighted_value - LINE_CENTER_POSITION;
     /* Positive GyrZ is a left turn, while a positive line offset requires a right turn. */
-    target_gyro_z = position_pid_calculate(target_position - line_offset);
-    gyro_speed_correction = gyro_pid_calculate(target_gyro_z - GyrZ);
+    target_gyro_z = position_pid_calculate(-line_offset+target_position);
+    /* Comment this line when the position loop should drive target_gyro_z again. */
+//    target_gyro_z = debug_target_gyro_z;
+
+    gyro_speed_correction = gyro_pid_calculate(target_gyro_z+target_gyro_z/2.15 - GyrZ);
 
     if (is_line_lost())
     {
@@ -163,23 +239,48 @@ void control_speed(void)
     }
     else
     {
-        i_speed = base_speed - (fabsf(line_offset) / LINE_CENTER_POSITION) * 50.0f;
+//        i_speed = base_speed - (fabsf(line_offset) / LINE_CENTER_POSITION) * base_speed*0.75;
+			    i_speed = base_speed;
     }
 
-    if ((statr_speed < i_speed) && (first_set == 0.0f))
+    if (i_speed < 0.0f)
     {
-        statr_speed += 10.5f;
+        i_speed = 0.0f;
+    }
+
+    if (slow_stop_active != 0U)
+    {
+        i_speed = 0.0f;
+        if (statr_speed > 5.0f)
+        {
+            statr_speed -= 5.0f;
+        }
+        else
+        {
+            statr_speed = 0.0f;
+            slow_stop_done = 1U;
+        }
+    }
+    else if ((statr_speed < i_speed) && (first_set == 0.0f))
+    {
+        statr_speed += 3.0f;
     }
     else
     {
         statr_speed = i_speed;
         first_set = 1.0f;
     }
-
     /* Positive correction retains the existing left-fast/right-slow turn mapping. */
-    left_speed_target = statr_speed + gyro_speed_correction;
-    right_speed_target = statr_speed - gyro_speed_correction;
-
+    left_speed_target = statr_speed - gyro_speed_correction;
+    right_speed_target = statr_speed +gyro_speed_correction;
+    right_speed_target*=1.015;
+    left_speed_target *= target_speed_scale;
+    right_speed_target *= target_speed_scale;
+    if (slow_stop_done != 0U)
+    {
+        left_speed_target = 0.0f;
+        right_speed_target = 0.0f;
+    }
     r_speed_left = left_speed_target;
     r_speed_right = right_speed_target;
 
@@ -193,7 +294,10 @@ void control_speed(void)
 
     Limit(&MOTOl, &MOTOr);
     set_speed(MOTOl, -MOTOr);
-
+    if (slow_stop_done != 0U)
+    {
+        star_car = 0U;
+    }
     last_last_error_l = last_error_l;
     last_last_error_r = last_error_r;
     last_error_l = error_l;

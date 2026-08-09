@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "stdlib.h"
+#include "math.h"
 #include "ganweixunji.h"
 #include "motor.h"
 #include "string.h"
@@ -42,6 +43,24 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef enum {
+  RACE_TASK_AB = 0,
+  RACE_TASK_LOOP,
+  RACE_TASK_LOOP_A
+} RaceTask;
+
+typedef enum {
+  RACE_MENU_CALIBRATION = 0,
+  RACE_MENU_TASK
+} RaceMenu;
+
+typedef enum {
+  RACE_STATE_READY = 0,
+  RACE_STATE_RUNNING,
+  RACE_STATE_PRESTOP,
+  RACE_STATE_STOPPING,
+  RACE_STATE_DONE
+} RaceState;
 
 
 /* USER CODE END PTD */
@@ -85,17 +104,213 @@ extern float GyrX, GyrY, GyrZ;/*角速度信息*/
 uint8_t track_mode = 1;  
 /****************************/
 
+static RaceTask race_selected_task = RACE_TASK_AB;
+static RaceMenu race_menu = RACE_MENU_CALIBRATION;
+static RaceState race_state = RACE_STATE_READY;
+static uint32_t race_start_tick;
+static uint32_t race_elapsed_ms;
+static float race_last_yaw;
+static float race_yaw_delta;
+
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+static void race_task_handle_keys(void);
+static void race_task_start(void);
+static void race_task_update(uint32_t now);
+static void race_task_draw_oled(void);
+static void race_task_draw_calibration_oled(void);
+static float race_yaw_delta_from_start(float current_yaw, float start_yaw);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static float race_yaw_delta_from_start(float current_yaw, float start_yaw)
+{
+  float delta = current_yaw - start_yaw;
+
+  if (delta > 15.0f) {
+    delta -= 360.0f;
+  }
+
+  return delta;
+}
+
+static void race_task_start(void)
+{
+  uint32_t now = HAL_GetTick();
+
+  PID_ClearSlowStop();
+  PID_SetTargetSpeedScale(1.0f);
+  PID_ResetAll();
+  race_state = RACE_STATE_RUNNING;
+  race_start_tick = now;
+  race_elapsed_ms = 0U;
+  race_last_yaw = Yaw;
+  race_yaw_delta = 0.0f;
+  k = (race_selected_task == RACE_TASK_LOOP_A) ? 2U : 1U;
+  star_car = 1U;
+  HAL_GPIO_WritePin(CAR_STATE_TOGGLE_GPIO_Port, CAR_STATE_TOGGLE_Pin, GPIO_PIN_RESET);
+}
+
+static void race_task_handle_keys(void)
+{
+  KeyEvent event = key_take_last_event();
+
+  if (event == KEY_EVENT_NONE) {
+    return;
+  }
+
+  if (race_menu == RACE_MENU_CALIBRATION) {
+    if (event == KEY_EVENT_3_PRESSED) {
+      race_menu = RACE_MENU_TASK;
+      race_state = RACE_STATE_READY;
+      race_elapsed_ms = 0U;
+    }
+    return;
+  }
+
+  if ((event == KEY_EVENT_2_PRESSED) &&
+      ((race_state == RACE_STATE_READY) || (race_state == RACE_STATE_DONE))) {
+    if (race_selected_task == RACE_TASK_AB) {
+      race_selected_task = RACE_TASK_LOOP;
+    } else if (race_selected_task == RACE_TASK_LOOP) {
+      race_selected_task = RACE_TASK_LOOP_A;
+    } else {
+      race_selected_task = RACE_TASK_AB;
+    }
+    race_state = RACE_STATE_READY;
+    race_elapsed_ms = 0U;
+  } else if ((event == KEY_EVENT_3_PRESSED) &&
+             ((race_state == RACE_STATE_READY) || (race_state == RACE_STATE_DONE))) {
+    race_task_start();
+  }
+}
+
+static void race_task_draw_calibration_oled(void)
+{
+  oled_i2c_clear_buffer();
+  sprintf((char *)send, "%.0f %.0f", speed_left, speed_right);
+  oled_i2c_draw_string(0, 0, (char *)send, 16, 1);
+  sprintf((char *)send, "%.1f %.1f", GyrZ, Yaw);
+  oled_i2c_draw_string(0, 16, (char *)send, 16, 1);
+  sprintf((char *)send, "%d%d%d%d%d%d%d%d",
+          sensor[0], sensor[1], sensor[2], sensor[3],
+          sensor[4], sensor[5], sensor[6], sensor[7]);
+  oled_i2c_draw_string(0, 32, (char *)send, 16, 1);
+}
+
+static void race_task_draw_menu_oled(void)
+{
+  uint32_t task_id = (uint32_t)race_selected_task + 1U;
+
+  oled_i2c_clear_buffer();
+  sprintf((char *)send, "%lu", (unsigned long)task_id);
+  oled_i2c_draw_string(0, 0, (char *)send, 16, 1);
+}
+
+static void race_task_draw_done_oled(void)
+{
+  uint32_t seconds = race_elapsed_ms / 1000U;
+  uint32_t centiseconds = (race_elapsed_ms % 1000U) / 10U;
+
+  oled_i2c_clear_buffer();
+  sprintf((char *)send, "%lu.%02lu", (unsigned long)seconds, (unsigned long)centiseconds);
+  oled_i2c_draw_string(0, 0, (char *)send, 16, 1);
+}
+
+static void race_task_draw_running_oled(void)
+{
+  uint32_t task_id = (uint32_t)race_selected_task + 1U;
+  uint32_t state_id;
+  uint32_t seconds = race_elapsed_ms / 1000U;
+  uint32_t centiseconds = (race_elapsed_ms % 1000U) / 10U;
+
+  if (race_state == RACE_STATE_RUNNING) { state_id = 1U; }
+  else if (race_state == RACE_STATE_PRESTOP) { state_id = 2U; }
+  else if (race_state == RACE_STATE_STOPPING) { state_id = 3U; }
+  else { state_id = 4U; }
+
+  oled_i2c_clear_buffer();
+  sprintf((char *)send, "%lu %lu", (unsigned long)task_id, (unsigned long)state_id);
+  oled_i2c_draw_string(0, 0, (char *)send, 16, 1);
+  sprintf((char *)send, "%lu.%02lu", (unsigned long)seconds, (unsigned long)centiseconds);
+  oled_i2c_draw_string(0, 16, (char *)send, 16, 1);
+  sprintf((char *)send, "%.0f", race_yaw_delta);
+  oled_i2c_draw_string(0, 32, (char *)send, 16, 1);
+  sprintf((char *)send, "%u %u", black_count, line_lost);
+  oled_i2c_draw_string(0, 48, (char *)send, 16, 1);
+}
+
+static void race_task_update(uint32_t now)
+{
+  if ((race_state != RACE_STATE_RUNNING) &&
+      (race_state != RACE_STATE_PRESTOP) &&
+      (race_state != RACE_STATE_STOPPING)) {
+    return;
+  }
+
+  race_elapsed_ms = now - race_start_tick;
+  race_yaw_delta = race_yaw_delta_from_start(Yaw, race_last_yaw);
+
+  if (race_state == RACE_STATE_RUNNING) {
+    if ((race_selected_task == RACE_TASK_AB) && (race_yaw_delta <= -20.0f)) {
+			PID_SetTargetSpeedScale(0.0f);
+      HAL_GPIO_WritePin(CAR_STATE_TOGGLE_GPIO_Port, CAR_STATE_TOGGLE_Pin, GPIO_PIN_SET);
+      race_state = RACE_STATE_STOPPING;
+    } else if ((race_selected_task == RACE_TASK_LOOP) &&
+               (race_yaw_delta <= -320.0f)) {
+      PID_SetTargetSpeedScale(0.0f);
+      HAL_GPIO_WritePin(CAR_STATE_TOGGLE_GPIO_Port, CAR_STATE_TOGGLE_Pin, GPIO_PIN_SET);
+      race_state = RACE_STATE_STOPPING;
+    } else if ((race_selected_task == RACE_TASK_LOOP_A) &&
+               (race_yaw_delta <= -330.0f)) {
+      PID_SetTargetSpeedScale(0.4f);
+      race_state = RACE_STATE_PRESTOP;
+    }
+  } else if (race_state == RACE_STATE_PRESTOP) {
+    if ((line_lost != 0U) || (black_count > 3U)) {
+      HAL_GPIO_WritePin(CAR_STATE_TOGGLE_GPIO_Port, CAR_STATE_TOGGLE_Pin, GPIO_PIN_SET);
+      star_car = 0U;
+      k = 0U;
+			set_speed(0, 0);
+      race_state = RACE_STATE_DONE;
+      race_elapsed_ms = now - race_start_tick;
+    } else if (black_count == 3U) {
+      HAL_GPIO_WritePin(CAR_STATE_TOGGLE_GPIO_Port, CAR_STATE_TOGGLE_Pin, GPIO_PIN_SET);
+      PID_RequestSlowStop();
+      race_state = RACE_STATE_STOPPING;
+    }
+  }
+
+  if ((race_state == RACE_STATE_STOPPING) &&
+      ((PID_IsSlowStopDone() != 0U) || (PID_IsTargetSpeedScaleStopped() != 0U))) {
+    star_car = 0U;
+    race_state = RACE_STATE_DONE;
+    k = 0U;
+    race_elapsed_ms = now - race_start_tick;
+  }
+}
+
+static void race_task_draw_oled(void)
+{
+  if (race_menu == RACE_MENU_CALIBRATION) {
+    race_task_draw_calibration_oled();
+    return;
+  }
+
+  if (race_state == RACE_STATE_READY) {
+    race_task_draw_menu_oled();
+  } else if (race_state == RACE_STATE_DONE) {
+    race_task_draw_done_oled();
+  } else {
+    race_task_draw_running_oled();
+  }
+}
 
 /* USER CODE END 0 */
 
@@ -136,7 +351,6 @@ int main(void)
   MX_TIM12_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-	HAL_GPIO_WritePin(GPIOB,GPIO_PIN_1,GPIO_PIN_SET);
 	oled_i2c_init_status = oled_i2c_init();
 	motor_init();
 	vofa_init();
@@ -157,7 +371,7 @@ int main(void)
 		current_time = HAL_GetTick();
 		if ((uint32_t)(current_time - telemetry_next_time) < 0x80000000U) //vofa 发送
 		{
-			float telemetry_values[2] = { speed_left, speed_right };
+			float telemetry_values[2] = { Kp_pos,speed_right };
 
 			telemetry_next_time = current_time + 10U;
 			(void)justfloat_send_dma(telemetry_values, 2U);
@@ -166,18 +380,7 @@ int main(void)
 		if((oled_i2c_init_status == HAL_OK) && (HAL_GetTick() - lcd_refresh_time > 100))  //oled数据
 		{
 			lcd_refresh_time = HAL_GetTick();
-			oled_i2c_clear_buffer();
-			sprintf((char *)send,"%d  %.1f ",line_lost,last_valid_position);
-			oled_i2c_draw_string(0, 0, (char *)send, 16, 1);
-			sprintf((char *)send,"%d%d%d%d%d%d%d%d    ",sensor[0],sensor[1],sensor[2],sensor[3],sensor[4],sensor[5],sensor[6],sensor[7]);
-			oled_i2c_draw_string(0, 16, (char *)send, 16, 1);
-
-			sprintf((char *)send,"%.2f, %.2f,",Yaw,GyrZ);
-			oled_i2c_draw_string(0, 32, (char *)send, 16, 1);
-
-			sprintf((char *)send,"%.2f%.2f  ",Kp_l,Ki_r);
-			oled_i2c_draw_string(0, 48, (char *)send, 16, 1);
-
+			race_task_draw_oled();
 			oled_i2c_init_status = oled_i2c_refresh();
 		}
 		if(HAL_GetTick() - gw_read_time > 5)  //循迹i2c读取速度限制  200hz
@@ -185,9 +388,11 @@ int main(void)
 			gw_read_time = HAL_GetTick();
 			gw_get_value();
 			track_line();
+			race_task_update(gw_read_time);
 		}
 			
 			key_control();
+			race_task_handle_keys();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

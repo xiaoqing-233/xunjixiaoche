@@ -11,18 +11,25 @@
 void control_speed(void);
 void PositionPID_Reset(void);
 void PID_ResetAll(void);
+void PID_RequestSlowStop(void);
+void PID_ClearSlowStop(void);
+uint8_t PID_IsSlowStopDone(void);
+uint8_t PID_IsTargetSpeedScaleStopped(void);
+void PID_SetTargetSpeedScale(float ratio);
 
 /*ʵ��*/
 float direction(float zhanxiangjiaodu);
 
 extern int16_t position_get;
 extern volatile uint8_t star_car;
+extern volatile uint8_t k;
 extern volatile uint16_t base_speed;
 extern volatile float Kp_l, Ki_l, Kd_l;
 extern volatile float Kp_r, Ki_r, Kd_r;
 
-extern float target_position;
-extern float target_gyro_z;
+extern volatile float target_position;
+extern volatile float target_gyro_z;
+extern volatile float debug_target_gyro_z;
 extern float gyro_speed_correction;
 extern volatile float Kp_pos, Ki_pos, Kd_pos;
 extern volatile float Kp_gyro, Ki_gyro, Kd_gyro;

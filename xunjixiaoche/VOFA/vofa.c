@@ -5,6 +5,7 @@
 
 #include "pid.h"
 #include "usart.h"
+#include "main.h"
 
 static uint8_t vofa_rx_byte;
 static uint8_t vofa_rx_frame[VOFA_RX_FRAME_SIZE];
@@ -231,31 +232,47 @@ static uint8_t vofa_apply_command(const char *command, float value)
     }
     else if (strcmp(command, "SW") == 0)
     {
-        star_car = (value != 0.0f) ? 1U : 0U;
+        uint8_t requested_state = (value != 0.0f) ? 1U : 0U;
+
+        HAL_GPIO_WritePin(CAR_STATE_TOGGLE_GPIO_Port,
+                          CAR_STATE_TOGGLE_Pin,
+                          (requested_state != 0U) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+        if (requested_state == 0U)
+        {
+            k = 0U;
+        }
+        star_car = requested_state;
         reset_required = 1U;
     }
-    else if ((strcmp(command, "P1") == 0) || (strcmp(command, "P2") == 0) ||
-             (strcmp(command, "P3") == 0))
+    else if (strcmp(command, "G") == 0)
     {
-        if (command[1] == '1') { Kp_l = value; Kp_r = value; }
+        debug_target_gyro_z = value;
+    }
+    else if ((strcmp(command, "P1") == 0) || (strcmp(command, "P2") == 0) ||
+             (strcmp(command, "P3") == 0) || (strcmp(command, "P4") == 0))
+    {
+        if (command[1] == '1') { Kp_l = value; }
         else if (command[1] == '2') { Kp_gyro = value; }
-        else { Kp_pos = value; }
+        else if (command[1] == '3') { Kp_pos = value; }
+        else { Kp_r = value; }
         reset_required = 1U;
     }
     else if ((strcmp(command, "I1") == 0) || (strcmp(command, "I2") == 0) ||
-             (strcmp(command, "I3") == 0))
+             (strcmp(command, "I3") == 0) || (strcmp(command, "I4") == 0))
     {
-        if (command[1] == '1') { Ki_l = value; Ki_r = value; }
+        if (command[1] == '1') { Ki_l = value; }
         else if (command[1] == '2') { Ki_gyro = value; }
-        else { Ki_pos = value; }
+        else if (command[1] == '3') { Ki_pos = value; }
+        else { Ki_r = value; }
         reset_required = 1U;
     }
     else if ((strcmp(command, "D1") == 0) || (strcmp(command, "D2") == 0) ||
-             (strcmp(command, "D3") == 0))
+             (strcmp(command, "D3") == 0) || (strcmp(command, "D4") == 0))
     {
-        if (command[1] == '1') { Kd_l = value; Kd_r = value; }
+        if (command[1] == '1') { Kd_l = value; }
         else if (command[1] == '2') { Kd_gyro = value; }
-        else { Kd_pos = value; }
+        else if (command[1] == '3') { Kd_pos = value; }
+        else { Kd_r = value; }
         reset_required = 1U;
     }
     else

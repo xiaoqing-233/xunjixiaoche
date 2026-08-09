@@ -13,5 +13,6 @@ typedef enum
 
 void key_control(void);
 KeyEvent key_get_last_event(void);
+KeyEvent key_take_last_event(void);
 
 #endif
